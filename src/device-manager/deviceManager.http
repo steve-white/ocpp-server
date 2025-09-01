@@ -1,0 +1,233 @@
+# Network ID to send the OCPP event to
+@networkid = sw-cp-phihong-test1
+
+# Local
+#@API_URL = http://localhost:5580
+
+# Container
+@API_URL = http://localhost:8080/device-manager
+
+# device-manager auth
+@USER = admin
+@PASS = admin
+
+### Ping API
+
+GET {{API_URL}}/ping HTTP/1.1
+Authorization: Basic {{USER}}:{{PASS}}
+content-type: application/json
+
+### Send DataTransfer request to OCPP device
+
+POST {{API_URL}}/actions/datatransfer/{{networkid}} HTTP/1.1
+Authorization: Basic {{USER}}:{{PASS}}
+content-type: application/json
+
+{
+    "vendorId": "sample",
+    "messageId": "Wed, 21 Oct 2015 18:27:50 GMT",
+    "data": "123"
+}
+
+### Send SetChargingProfile (ChargePointMaxProfile) to OCPP device
+
+# ChargePointMaxProfile
+POST {{API_URL}}/actions/setchargingprofile/{{networkid}} HTTP/1.1
+Authorization: Basic {{USER}}:{{PASS}}
+content-type: application/json
+
+{
+  "connectorId": 0,
+  "csChargingProfiles": {
+    "chargingProfileId": 1,
+    "stackLevel": 0,
+    "chargingProfileKind": "Absolute",
+    "chargingProfilePurpose": "ChargePointMaxProfile",
+    "chargingSchedule": {
+      "chargingRateUnit": "W",
+      "chargingSchedulePeriod": [
+        {
+          "startPeriod": 0,
+          "limit": 10000,
+          "numberPhases": 3
+        }
+      ],
+      "duration": 0,
+      "minChargingRate": 0,
+      "startSchedule": "2025-04-10T08:27:07Z"
+    }
+  }
+}
+
+### TxDefaultProfile
+POST {{API_URL}}/actions/setchargingprofile/{{networkid}} HTTP/1.1
+Authorization: Basic {{USER}}:{{PASS}}
+content-type: application/json
+
+{
+  "connectorId": 1,
+  "csChargingProfiles": {
+    "chargingProfileId": 2,
+    "stackLevel": 1,
+    "chargingProfileKind": "Absolute",
+    "chargingProfilePurpose": "TxDefaultProfile",
+    "chargingSchedule": {
+      "chargingRateUnit": "W",
+      "chargingSchedulePeriod": [
+        {
+          "startPeriod": 0,
+          "limit": 5000,
+          "numberPhases": 3
+        }
+      ],
+      "duration": 300,
+      "minChargingRate": 0,
+      "startSchedule": "2025-04-10T13:47:00Z"
+    }
+  }
+}
+
+### TxProfile
+
+POST {{API_URL}}/actions/setchargingprofile/{{networkid}} HTTP/1.1
+Authorization: Basic {{USER}}:{{PASS}}
+content-type: application/json
+
+{
+  "connectorId": 1,
+  "csChargingProfiles": {
+    "chargingProfileId": 3,
+    "stackLevel": 1,
+    "chargingProfileKind": "Absolute",
+    "chargingProfilePurpose": "TxProfile",
+    "transactionId": 6108,
+    "chargingSchedule": {
+      "chargingRateUnit": "W",
+      "chargingSchedulePeriod": [
+        {
+          "startPeriod": 0,
+          "limit": 3000,
+          "numberPhases": 3
+        }
+      ],
+      "duration": 0,
+      "minChargingRate": 0,
+      "startSchedule": "2025-04-10T08:27:07Z"
+    }
+  }
+}
+
+### Send ClearChargingProfile to OCPP device
+
+POST {{API_URL}}/actions/clearchargingprofile/{{networkid}} HTTP/1.1
+Authorization: Basic {{USER}}:{{PASS}}
+content-type: application/json
+
+{
+    "connectorId": 1,
+    "chargingProfilePurpose": "TxProfile",
+    "stackLevel": 2
+}
+
+
+### Send RemoteStartTransaction to OCPP device
+
+POST {{API_URL}}/actions/remotestarttransaction/{{networkid}} HTTP/1.1
+Authorization: Basic {{USER}}:{{PASS}}
+content-type: application/json
+
+{ 
+    "idTag" : "",
+    "connectorId": 0
+}
+
+
+### Send RemoteStopTransaction to OCPP device
+
+POST {{API_URL}}/actions/remotestoptransaction/{{networkid}} HTTP/1.1
+Authorization: Basic {{USER}}:{{PASS}}
+content-type: application/json
+
+{ 
+    "transactionId" : 0
+}
+
+
+### Send UnlockConnector to OCPP device
+
+POST {{API_URL}}/actions/unlockconnector/{{networkid}} HTTP/1.1
+Authorization: Basic {{USER}}:{{PASS}}
+content-type: application/json
+
+{ 
+    "connectorId" : 0
+}
+
+
+### Send Reset to OCPP device
+
+POST {{API_URL}}/actions/reset/{{networkid}} HTTP/1.1
+Authorization: Basic {{USER}}:{{PASS}}
+content-type: application/json
+
+{ 
+    "type" : "Hard"
+}
+
+### Send GetDiagnostics to OCPP device
+
+POST {{API_URL}}/actions/getdiagnostics/{{networkid}} HTTP/1.1
+Authorization: Basic {{USER}}:{{PASS}}
+content-type: application/json
+
+{
+    "location": "ftp://user@password@localhost:21/diagnostics.zip",
+    "retries": 3,
+    "retryInterval": 5000
+}
+
+### Send GetConfiguration to OCPP device
+
+POST {{API_URL}}/actions/getconfiguration/{{networkid}} HTTP/1.1
+Authorization: Basic {{USER}}:{{PASS}}
+content-type: application/json
+
+{
+    "key": ["ChargingScheduleAllowedChargingRateUnit", "MeterValuesSampledData", "TimeOffset", "MaxChargingPower", "MinChargingPower", "ChargingSchedule"]
+}
+
+### Send ChangeAvailability to OCPP device
+
+
+POST {{API_URL}}/actions/changeavailability/{{networkid}} HTTP/1.1
+Authorization: Basic {{USER}}:{{PASS}}
+content-type: application/json
+
+{
+    "connectorId": 1,
+    "type": "Inoperative"
+}
+
+### Send ChangeConfiguration to OCPP device
+
+POST {{API_URL}}/actions/changeconfiguration/{{networkid}} HTTP/1.1
+Authorization: Basic {{USER}}:{{PASS}}
+content-type: application/json
+
+{
+    "key": "WebSocketPingInterval",
+    "value": 25
+}
+
+### Send TriggerMessage to OCPP device
+
+POST {{API_URL}}/actions/triggermessage/{{networkid}} HTTP/1.1
+Authorization: Basic {{USER}}:{{PASS}}
+content-type: application/json
+
+// requestedMessage: BootNotification, Heartbeat, MeterValues, StatusNotification 
+{
+    "requestedMessage": "MeterValues",
+    "connectorId": 1
+}
+

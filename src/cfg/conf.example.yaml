@@ -1,0 +1,51 @@
+schema: 1.0
+services:
+  csms_server:
+    debug: false
+    # If enable_auth=false, then redis cache: is not required
+    enable_auth: false
+    # standalone_mode should only be used for load testing. It suppresses sending certains messages to MQ, e.g Hearbeat, BootNotification, MeterValues, etc...
+    standalone_mode: true
+    listen_address: "0.0.0.0"
+    listen_port: 30002
+    cache:
+      host_port: ""
+      password: redis
+      db_id: 0
+  message_manager:
+    debug: false
+    # if store_messages=false, messages are not stored
+    store_messages: false
+    storage_account_name: ""
+    storage_account_key: ""
+  session:
+    debug: false
+    db_type: sqlite3
+    db_connection_string: "../db/csms.db?cache=shared&_journal_mode=WAL&_synchronous=NORMAL"
+  device_manager:
+    debug: false
+    http_config:
+      listen_address: 0.0.0.0
+      listen_port: 5580
+      http_user: admin
+      http_password: admin
+      timeoutms: 30000
+      idle_timeoutms: 30000
+logging:
+  appinsights_instrumentation_key: ""
+mq:
+  type: mangos_mq
+  # MangosMq is brokerless. There's nothing to set up for this MQ type. Consider other types broken for now.
+  mangos_mq:
+    csms_listen_request_url: "tcp://127.0.0.1:5554"
+    csms_listen_url: "tcp://127.0.0.1:5555"
+  rabbit_mq:
+    server_url: "amqp://192.168.20.106"
+  redis_mq:
+    host_port: "192.168.20.106:6379"
+    password: redis
+    db_id: 0
+
+db_config:
+  type: sqlite3
+  connection_string: "../db/csms.db?cache=shared&_journal_mode=WAL&_synchronous=NORMAL"

@@ -1,0 +1,40 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch csms-server",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "./src/csms-server", 
+            "cwd": "./src/csms-server",
+            "args": [ ]
+        },
+        {
+            "name": "Launch message-manager",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "./src/message-manager", 
+            "cwd": "./src/message-manager", 
+            "args": [ ]
+        },
+        {
+            "name": "Launch session",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "./src/session", 
+            "cwd": "./src/session", 
+            "args": [ ]
+        },{
+            "name": "Launch device-manager",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "./src/device-manager", 
+            "cwd": "./src/device-manager", 
+            "args": [ ]
+        }
+    ]
+}
