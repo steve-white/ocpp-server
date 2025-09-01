@@ -1,4 +1,3 @@
-
 - [OCPP Charge Station Management System (CSMS)](#ocpp-charge-station-management-system-csms)
 - [Architecture](#architecture)
   - [csms-server](#csms-server)
@@ -33,8 +32,7 @@ However, it has been architected with the mindset of building out the services p
 # Architecture
 
 Proposed architecture:
-![OCPP.CSMS - Component diagram](./doc/OCPP.CSMS - Component diagram.drawio.png)
-
+![OCPP.CSMS - Component diagram](./doc/OCPP.CSMS%20-%20Component%20diagram.drawio.png)
 
 ## csms-server
 
