@@ -31,7 +31,6 @@ However, it has been architected with the mindset of building out the services p
 
 # Architecture
 
-Proposed architecture:
 ![OCPP.CSMS - Component diagram](./doc/OCPP.CSMS%20-%20Component%20diagram.drawio.png)
 
 ## csms-server
@@ -105,13 +104,11 @@ For StartTransaction, it:
 
 ## device-manager
 
-This application manages OCPP devices, which can be manipulated by a REST API (TODO).
-
-Changes to device configuration is updated in Redis, which can then be read by other services, such as WebSocketServer .
+This application manages OCPP devices, which can be manipulated by a REST API. Changes to device configuration is updated in Redis, which can then be read by other services, such as `csms-server`. (TODO)
 
 Responsibilities:
 - Provides an API to mutate devices in the CSMS system
-- Maintains authentication records (by networkId) in redis cache from data stored in SQL DB.
+- Maintains authentication records (by networkId) in redis cache from data stored in SQL DB (TODO).
 
 - REST API provides the ability to: 
   - Send `DataTransfer` & `SetChargingProfile` messages to connected networkIds.
