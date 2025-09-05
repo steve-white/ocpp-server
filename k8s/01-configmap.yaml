@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ocpp-csms-config
+  namespace: default
+data:
+  conf.yaml: |
+    schema: 1.0
+    services:
+      csms_server:
+        debug: false
+        enable_auth: false
+        standalone_mode: true
+        listen_address: "0.0.0.0"
+        listen_port: 30002
+        cache:
+          host_port: ""
+          password: redis
+          db_id: 0
+      message_manager:
+        debug: false
+        store_messages: false
+        storage_account_name: ""
+        storage_account_key: ""
+      session:
+        debug: false
+        db_type: sqlite3
+        db_connection_string: "/usr/local/csms-server/db/csms.db?cache=shared&_journal_mode=WAL&_synchronous=NORMAL"
+      device_manager:
+        debug: false
+        http_config:
+          listen_address: 0.0.0.0
+          listen_port: 5580
+          http_user: admin
+          http_password: admin
+          timeoutms: 30000
+          idle_timeoutms: 30000
+    logging:
+      appinsights_instrumentation_key: ""
+    mq:
+      type: mangos_mq
+      mangos_mq:
+        csms_listen_request_url: "tcp://127.0.0.1:5554"
+        csms_listen_url: "tcp://127.0.0.1:5555"
+      rabbit_mq:
+        server_url: "amqp://192.168.20.106"
+      redis_mq:
+        host_port: "192.168.20.106:6379"
+        password: redis
+        db_id: 0
+    db_config:
+      type: sqlite3
+      connection_string: "/usr/local/csms-server/db/csms.db?cache=shared&_journal_mode=WAL&_synchronous=NORMAL"

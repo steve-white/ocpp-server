@@ -201,6 +201,7 @@ func ReceiveMqTopicMessages(socket mangos.Socket, ProcessRecvMqMessage func(mess
 			log.Logger.Debugf("MQ[%s] recv: %s", topicName, newStr)
 			ProcessRecvMqMessage([]byte(newStr), state)
 		}
+		_ = socket.Send([]byte{}) // ACK for REQ/REP
 	}
 }
 

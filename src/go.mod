@@ -1,8 +1,6 @@
 module sw/ocpp/csms
 
-go 1.22.0
-
-toolchain go1.23.2
+go 1.24
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.7.0
@@ -42,6 +40,7 @@ require (
 	github.com/onsi/gomega v1.15.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.2 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/puzpuzpuz/xsync/v4 v4.1.0 // indirect
 	github.com/rogpeppe/go-internal v1.11.0 // indirect
 	github.com/spf13/afero v1.9.3 // indirect
 	github.com/spf13/cast v1.5.0 // indirect

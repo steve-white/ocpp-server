@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ocpp-csms
+  namespace: default
+  labels:
+    app: ocpp-csms
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # Required for PVC
+  selector:
+    matchLabels:
+      app: ocpp-csms
+  template:
+    metadata:
+      labels:
+        app: ocpp-csms
+    spec:
+      containers:
+      - name: ocpp-csms
+        image: ocpp-csms:latest
+        imagePullPolicy: Never  # Change to Always if using registry
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        volumeMounts:
+        - name: config-volume
+          mountPath: /usr/local/csms-server/cfg/conf.yaml
+          subPath: conf.yaml
+          readOnly: true
+        - name: db-volume
+          mountPath: /usr/local/csms-server/db
+        - name: logs-volume
+          mountPath: /usr/local/csms-server/logs
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
+      volumes:
+      - name: config-volume
+        configMap:
+          name: ocpp-csms-config
+      - name: db-volume
+        persistentVolumeClaim:
+          claimName: ocpp-csms-db-pvc
+      - name: logs-volume
+        emptyDir: {}
+      restartPolicy: Always

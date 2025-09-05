@@ -5,7 +5,7 @@
 #@API_URL = http://localhost:5580
 
 # Container
-@API_URL = http://localhost:8080/device-manager
+#@API_URL = http://localhost:8080/device-manager
 
 # device-manager auth
 @USER = admin
