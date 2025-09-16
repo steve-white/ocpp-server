@@ -9,6 +9,8 @@
   - [Local Development](#local-development)
     - [Configuration](#configuration-1)
     - [Running](#running)
+      - [Container](#container)
+      - [Local](#local)
     - [Logging](#logging)
     - [Packaging](#packaging)
   - [Containerisation](#containerisation)
@@ -29,6 +31,8 @@ This CSMS system comprises of the following components:
 
 Note: This is a proof of concept only. It only handles a single tenant, there aren't any tests and there are TODOs everywhere in the code. 
 However, it has been architected with the mindset of building out the services properly with a full feature set at a later date.
+
+To run the public docker image, [see here](#container)
 
 # Architecture
 
@@ -141,6 +145,16 @@ See `conf.example.yaml` for example configuration.
 
 ### Running
 
+#### Container
+
+Run from public docker image:
+```
+docker pull swisssteve/ocpp-csms:latest
+docker run -d -p 8080:8080 --name ocpp-csms-container ocpp-csms:latest
+```
+
+#### Local
+
 To run all binaries as daemons cd `./run_all.sh`
 
 To omit a daemon from being started, e.g `device-manager`, run: `ans=device-manager ./run_all.sh`
@@ -150,6 +164,7 @@ This would typically be done if a daemon e.g `device-manager`, is being debugged
 
 All daemons log to: `./logs/*.log`
 Logs are rotated when they reach 10MB, up to a maximum of 10 files.
+Under containerisation, all logs go to stdout.
 
 ### Packaging
 
