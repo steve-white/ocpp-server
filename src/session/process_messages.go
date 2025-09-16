@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	db "sw/ocpp/csms/internal/db"
-	log "sw/ocpp/csms/internal/logging"
 	mqmodels "sw/ocpp/csms/internal/models/mq"
 	mq "sw/ocpp/csms/internal/mq"
 	ocppmodels "sw/ocpp/csms/internal/ocpp"
@@ -15,7 +14,7 @@ func ProcessRecvMessage(messageBy []byte, state any) {
 	msgEnvelope := new(mqmodels.MqMessageEnvelope)
 	err := json.Unmarshal(messageBy, &msgEnvelope)
 	if err != nil {
-		log.Logger.Errorf("MQ Received Message, unmarshall error: %s\n", err.Error())
+		log.Errorf("MQ Received Message, unmarshall error: %s\n", err.Error())
 		return
 	}
 
@@ -39,19 +38,19 @@ func ProcessRecvMessage(messageBy []byte, state any) {
 		return
 	}
 
-	log.Logger.Debugf("MQ Received MessagesOut: %s\n", string(messageBy))
+	log.Debugf("MQ Received MessagesOut: %s\n", string(messageBy))
 
 	msgId := ocppEnvelopeFields["msgId"].(string)
 
 	timeStarted, err := time.Parse("2006-01-02T15:04:05.000Z", msgEnvelope.MessageTime)
 	if err != nil {
-		log.Logger.Errorf("Unable to parse message time: {%s} - {%s}", msgEnvelope.MessageTime, err.Error())
+		log.Errorf("Unable to parse message time: {%s} - {%s}", msgEnvelope.MessageTime, err.Error())
 	}
 
 	transResponse := new(ocppmodels.OcppTransactionResponse)
 	transactionId, err := db.InsertNextTransaction(msgEnvelope.Client, timeStarted)
 	if err != nil {
-		_log.Errorf("Error inserting transation: %s", err.Error())
+		log.Errorf("Error inserting transation: %s", err.Error())
 		transResponse.IdTagInfo.Status = "error"
 	} else {
 		transResponse.TransactionId = *transactionId
@@ -64,7 +63,7 @@ func ProcessRecvMessage(messageBy []byte, state any) {
 
 	transResponseBy, err := json.Marshal(&transResponse)
 	if err != nil {
-		_log.Errorf("Error marshalling response: %s", err.Error())
+		log.Errorf("Error marshalling response: %s", err.Error())
 		return
 	}
 	transResponseRaw := json.RawMessage(transResponseBy)
@@ -72,10 +71,10 @@ func ProcessRecvMessage(messageBy []byte, state any) {
 
 	json, _ := mq.MqCreateMessageEnvelope(msgEnvelope.ServerNode, msgEnvelope.Client, ocppResponse)
 
-	mqErr := _serviceState.MqBus.MqMessagePublishRetry(mq.MqChannelName_MessagesOut, json)
+	mqErr := serviceState.MqBus.MqMessagePublishRetry(mq.MqChannelName_MessagesOut, json)
 	if mqErr != nil {
-		_log.Errorf("Error sending reply to MQ, msg lost: %s", mqErr.Error())
-		//return mqErr // transient MQ error unrecoverable, close connection to CP
+		log.Errorf("Error sending reply to MQ, msg lost: %s", mqErr.Error())
+		// transient MQ error unrecoverable, close connection to CP
 		// TODO log to appinsights
 	}
 }

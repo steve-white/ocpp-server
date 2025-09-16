@@ -25,8 +25,10 @@ type OcppMessage ocpp.OcppMessage
 type OcppHeartBeatAck ocpp.OcppHeartBeatAck
 type OcppDataTransfer ocpp.OcppDataTransfer
 
-const NETWORKID_MAXLEN = 32
-const MAX_MSG_SIZE = 8192
+const (
+	NetworkIdMaxLen = 32
+	MaxMsgSize      = 8192
+)
 
 var (
 	// DefaultUpgrader specifies the parameters for upgrading an HTTP
@@ -66,10 +68,11 @@ func removeConnection(serviceState *ServiceState, networkId string) {
 	conns.Delete(networkId)
 }
 
+// TODO this needs some serious refactoring
 // ServeHTTP implements the http.Handler that proxies WebSocket connections.
 func (w *Websocket) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
-	_log.Debug("Client connected to : ", req.Host, " path:", req.URL.Path, ", client: ", req.RemoteAddr)
+	log.Debug("Client connected to : ", req.Host, " path:", req.URL.Path, ", client: ", req.RemoteAddr)
 	authenticated, networkId := AuthConnection(rw, req, w.serviceState)
 	if !authenticated {
 		return
@@ -86,7 +89,7 @@ func (w *Websocket) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	if !w.serviceState.Config.Services.CsmsServer.StandaloneMode {
 		err := mq.MqNotifyClientConnected(w.serviceState.MqBus, w.serviceState.Context.HostName, connectionState.Info)
 		if err != nil {
-			_log.Errorf("%s : websocket: problem sending MQ notify connected %s", remoteAddrStr, err)
+			log.Errorf("%s : websocket: problem sending MQ notify connected %s", remoteAddrStr, err)
 			return
 		}
 	}
@@ -97,7 +100,7 @@ func (w *Websocket) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	// Upgrade the existing incoming request to a WebSocket connection.
 	connPub, err := upgrader.Upgrade(rw, req, upgradeHeader)
 	if err != nil {
-		_log.Errorf("%s : websocket: couldn't upgrade %s", remoteAddrStr, err)
+		log.Errorf("%s : websocket: couldn't upgrade %s", remoteAddrStr, err)
 		return
 	}
 	connectionState.WebSocket = connPub
@@ -107,11 +110,7 @@ func (w *Websocket) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	handleClientWebsocket := func(src *websocket.Conn, errc chan error) {
 
-		/*if (_log.IsLevelEnabled(logrus.DebugLevel)) {
-			_log.Debugf("MaxMsgSize: %d", MAX_MSG_SIZE)
-		}*/
-		src.SetReadLimit(MAX_MSG_SIZE)
-
+		src.SetReadLimit(MaxMsgSize)
 		for {
 
 			msgType, msg, err := src.ReadMessage()
@@ -124,14 +123,14 @@ func (w *Websocket) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 				}*/
 				errc <- err
 				//disposeClient(w.serviceState, &connectionState)
-				_log.Warnf("%s : Client disconnected(read): %s", remoteAddrStr, err)
+				log.Warnf("%s : Client disconnected(read): %s", remoteAddrStr, err)
 				break
 			}
 
 			err = HandleMessage(msgType, msg, w.serviceState, &connectionState)
 			if err != nil {
 				errc <- err
-				_log.Warnf("%s : Error: %s", remoteAddrStr, err)
+				log.Warnf("%s : Error: %s", remoteAddrStr, err)
 				break
 			}
 		}
@@ -142,6 +141,7 @@ func (w *Websocket) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	// https://github.com/gobwas/ws
 	go handleClientWebsocket(connPub, errClient)
 
+	// TODO handle ping in csms-server
 	//cancelChan := make(chan bool)
 	//go runPingWebsocket(connPub, errClient, cancelChan)
 
@@ -149,12 +149,12 @@ func (w *Websocket) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	if err == <-errClient {
 		message = "websocket: Error when copying from client: %v"
 	}
-	_log.Warnf("%s : Wait return, close", remoteAddrStr)
+	log.Warnf("%s : Wait return, close", remoteAddrStr)
 	if e, ok := err.(*websocket.CloseError); !ok || e.Code == websocket.CloseAbnormalClosure {
-		_log.Errorf(message, err)
+		log.Errorf(message, err)
 	}
 	disposeClient(w.serviceState, &connectionState)
-	_log.Warnf("%s : Return", remoteAddrStr)
+	log.Warnf("%s : Return", remoteAddrStr)
 }
 
 func disposeClient(serviceState *ServiceState, connState *svc.ConnectionState) {
@@ -175,11 +175,11 @@ func runPingWebsocket(src *websocket.Conn, errc chan error, cancel chan bool) {
 				break
 			case <-time.After(60 * time.Second):
 				msg := GetHeatBeatAck()
-				_log.Debugf("%s: Send Heartbeat: %s", src.RemoteAddr().String(), msg)
+				log.Debugf("%s: Send Heartbeat: %s", src.RemoteAddr().String(), msg)
 				err := src.WriteMessage(websocket.TextMessage, []byte(msg))
 				if err != nil {
 					errc <- err
-					_log.Warnf("Client disconnected: %s", src.RemoteAddr().String())
+					log.Warnf("Client disconnected: %s", src.RemoteAddr().String())
 					break
 				}
 				break
@@ -187,6 +187,7 @@ func runPingWebsocket(src *websocket.Conn, errc chan error, cancel chan bool) {
 		}
 	}
 */
+
 type HandleMessageDelegate interface {
 	HandleMessage(isServer bool, msg []byte) []byte
 }
@@ -194,7 +195,7 @@ type HandleMessageDelegate interface {
 func HandleMessage(msgType int, msgBytes []byte, serviceState *ServiceState, connectionState *svc.ConnectionState) error {
 	msgStr := string(msgBytes)
 
-	_log.Debug("RecvClient->: ", msgStr)
+	log.Debug("RecvClient->: ", msgStr)
 
 	var msgEnvelope OcppMessage
 	err := msgEnvelope.UnmarshalOcppJson(msgBytes)
@@ -212,7 +213,7 @@ func HandleMessage(msgType int, msgBytes []byte, serviceState *ServiceState, con
 	sendToMq := true
 	standaloneMode := serviceState.Config.Services.CsmsServer.StandaloneMode
 	if err != nil {
-		_log.Warnf("Unable to parse ocpp envelope: %s, for message: %s", err, msgStr)
+		log.Warnf("Unable to parse ocpp envelope: %s, for message: %s", err, msgStr)
 		// TODO envelope bad messages and send to other storage?
 
 		return nil // Ignore malformed message
@@ -220,22 +221,18 @@ func HandleMessage(msgType int, msgBytes []byte, serviceState *ServiceState, con
 		if msgEnvelope.Direction == ocpp.MsgType_ServerToClientResult {
 			_, ok := serviceState.MessagesWaiting.Load(msgEnvelope.MsgId)
 			if ok {
-				//response := ocpp.OcppMessage(msgEnvelope)
-				//msg := val.(*svc.WaitingMessage)
-				//msg.Response = &response
-				//msg.CreatedTimestamp = time.Now()
-				_log.Debugf("Valid message response: %s", msgEnvelope.MsgId)
+				log.Debugf("Valid message response: %s", msgEnvelope.MsgId)
 
 				mqErr := serviceState.MqBus.MqSendClientMessageRetry(serviceState.Context.HostName, connectionState.Info, msgEnvelope)
 				if mqErr != nil {
-					_log.Errorf("Error sending to MQ: %s", mqErr.Error())
+					log.Errorf("Error sending to MQ: %s", mqErr.Error())
 					return mqErr // transient MQ error unrecoverable, close connection to CP
 				}
 
 				serviceState.MessagesWaiting.Delete(msgEnvelope.MsgId)
 				return nil
 			} else {
-				_log.Warnf("No waiting messages for message: %s", msgStr)
+				log.Warnf("No waiting messages for message: %s", msgStr)
 			}
 		} else if msgEnvelope.Direction == ocpp.MsgType_ClientToServer {
 			switch msgEnvelope.MessageType {
@@ -248,7 +245,7 @@ func HandleMessage(msgType int, msgBytes []byte, serviceState *ServiceState, con
 					sendToMq = false
 				}
 
-				_log.Debugf("Received BootNotification: %s", msgStr)
+				log.Debugf("Received BootNotification: %s", msgStr)
 				bootResponse := OcppBootNotificationResponse{Status: ocpp.BootStatus_Accepted, CurrentTime: helpers.GenerateDateNow(), Interval: 60}
 				msgSendBy, _ = MarshalOcppJsonResponse(ocpp.MsgType_ServerToClientResult, msgEnvelope.MsgId, &bootResponse)
 
@@ -256,7 +253,7 @@ func HandleMessage(msgType int, msgBytes []byte, serviceState *ServiceState, con
 				if standaloneMode {
 					sendToMq = false
 				}
-				_log.Debugf("Received Heartbeat: %s", msgStr)
+				log.Debugf("Received Heartbeat: %s", msgStr)
 				msg := ocpp.GetHeatBeatAck(msgEnvelope.MsgId)
 				msgSendBy = []byte(msg)
 			case "StartTransaction":
@@ -270,14 +267,14 @@ func HandleMessage(msgType int, msgBytes []byte, serviceState *ServiceState, con
 				msgSendBy = []byte(fmt.Sprintf("[%d,\"%s\",{\"status\":\"UnknownVendorId\"}]", ocpp.MsgType_ServerToClientResult, msgEnvelope.MsgId))
 			}
 		} else {
-			_log.Errorf("Unhandled OCPP direction: %d", msgEnvelope.Direction)
+			log.Errorf("Unhandled OCPP direction: %d", msgEnvelope.Direction)
 		}
 	}
 
 	if sendToMq {
 		mqErr := serviceState.MqBus.MqSendClientMessageRetry(serviceState.Context.HostName, connectionState.Info, msgEnvelope)
 		if mqErr != nil {
-			_log.Errorf("Error sending to MQ: %s", mqErr.Error())
+			log.Errorf("Error sending to MQ: %s", mqErr.Error())
 			return mqErr // transient MQ error unrecoverable, close connection to CP
 		}
 	}
@@ -291,14 +288,14 @@ func HandleMessage(msgType int, msgBytes []byte, serviceState *ServiceState, con
 	}
 
 	if msgSendBy != nil {
-		if _log.IsLevelEnabled(logrus.DebugLevel) {
-			_log.Debug("<-SendClient: ", string(msgSendBy))
+		if log.IsLevelEnabled(logrus.DebugLevel) {
+			log.Debug("<-SendClient: ", string(msgSendBy))
 		}
 		connectionState.WebSocketMutex.Lock()
 		err = connectionState.WebSocket.WriteMessage(msgType, msgSendBy)
 		connectionState.WebSocketMutex.Unlock()
 		if err != nil {
-			_log.Warnf("%s : Client disconnected(write): %s", connectionState.Info.RemoteAddr, err)
+			log.Warnf("%s : Client disconnected(write): %s", connectionState.Info.RemoteAddr, err)
 			return err
 		}
 	}
@@ -314,7 +311,7 @@ func GetOcppDirection(buf []byte) (int, error) {
 	var parsedData []interface{}
 	err := json.Unmarshal(buf, &parsedData)
 	if err != nil {
-		_log.Errorf("Error parsing JSON: %s", err)
+		log.Errorf("Error parsing JSON: %s", err)
 		return -1, err
 	}
 
@@ -323,11 +320,11 @@ func GetOcppDirection(buf []byte) (int, error) {
 			direction := int(firstValue)
 			return direction, nil
 		} else {
-			_log.Errorf("First value is not a number")
-			return -1, errors.New("First value is not a number")
+			log.Errorf("OCPP Event issue. First value is not a number")
+			return -1, errors.New("first value is not a number")
 		}
 	} else {
-		_log.Errorf("JSON array is empty")
+		log.Errorf("JSON array is empty")
 		return -1, errors.New("JSON array is empty")
 	}
 }
@@ -340,16 +337,13 @@ func (n *OcppMessage) UnmarshalOcppJson(buf []byte) error {
 	}
 
 	if direction == ocpp.MsgType_ClientToServer {
-
 		tmp := []interface{}{&n.Direction, &n.MsgId, &n.MessageType, &n.MessageBody}
-
 		if err := json.Unmarshal(buf, &tmp); err != nil {
 			return err
 		}
 	} else if direction == ocpp.MsgType_ServerToClientResult {
 
 		tmp := []interface{}{&n.Direction, &n.MsgId, &n.MessageBody}
-
 		if err := json.Unmarshal(buf, &tmp); err != nil {
 			return err
 		}

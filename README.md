@@ -17,13 +17,14 @@
 
 # OCPP Charge Station Management System (CSMS)
 
-OCPP Chargers typically need a backend CSMS so they can be managed or debugged. This provides such an interface.
+OCPP Chargers typically need a backend CSMS so they can be managed or debugged. 
+This system provides an OCPP v1.6 CSMS endpoint, that chargers (or simulated chargers) can connect to and start and stop sessions against. Commands can be sent to the chargers via a REST API, e.g to set smart charging profiles, get diagnostics, etc...
 
 This CSMS system comprises of the following components:
 
 - ocpp-csms - websocket server for OCPP 1.6 ChargePoints
 - message-manager - reads/writes events and messages from/to an MQ to a repository
-- device-manager - manages device information & send arbitary commands to chargers (e.g `DataTransfer`, `SetChargingProfile`)
+- device-manager - manages device information & send arbitary commands to chargers (e.g `DataTransfer`, `SetChargingProfile`, `GetDiagnostics`)
 - session - handle Start/StopTransaction OCPP events
 
 Note: This is a proof of concept only. It only handles a single tenant, there aren't any tests and there are TODOs everywhere in the code. 
@@ -35,8 +36,9 @@ However, it has been architected with the mindset of building out the services p
 
 ## csms-server
 
-This application server creates a multi websocket server for OCPP 1.6 ChargePoints to connect to.
-It handles a subset of OCPP 1.6 messages to provide basic OCPP functionality to the ChargePoints.
+This application server creates a multi websocket server for OCPP v1.6 ChargePoints to connect to.
+
+It handles a subset of OCPP v1.6 messages to provide basic OCPP functionality to the ChargePoints.
 
 Features:
   - OCPP Websocket server
@@ -165,7 +167,7 @@ The two entry points, i.e the OCPP websocket and device-manager HTTP API are fro
 
 This provides the following endpoints:
 
-- OCPP v1.6 web-socket - `ws://localhost:8080/ocpp`- 
+- OCPP v1.6 web-socket - `ws://localhost:8080/ocpp`
 - device-manager API - `http://localhost:8080/device-manager`
 
 ### Building - Locally

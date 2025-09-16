@@ -7,7 +7,7 @@ import (
 
 	conf "sw/ocpp/csms/internal/config"
 	helpers "sw/ocpp/csms/internal/helpers"
-	log "sw/ocpp/csms/internal/logging"
+	"sw/ocpp/csms/internal/logging"
 	svc "sw/ocpp/csms/internal/models/service"
 	mq "sw/ocpp/csms/internal/mq"
 	service "sw/ocpp/csms/internal/service"
@@ -19,10 +19,9 @@ import (
 )
 
 var (
-	// Globals
-	_exitNotification chan T
-	_log              = log.Logger
-	_serviceState     *ServiceState
+	exitNotification chan T
+	log              = logging.Logger
+	serviceState     *ServiceState
 )
 
 type T = struct{}
@@ -50,7 +49,7 @@ func initialise() *ServiceState {
 
 	var tableClient *aztables.Client
 	if !config.Services.MessageManager.StoreMessages {
-		log.Logger.Warn("Not storing messages")
+		log.Warn("Not storing messages")
 	} else {
 		mq.SetupMqReceiver(mqConnection, config.Mq.Type, serviceContext.HostName, mq.MqChannelName_MessagesIn)
 
@@ -80,49 +79,49 @@ func main() {
 	sigchnl := make(chan os.Signal, 1)
 	signal.Notify(sigchnl, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
 
-	_exitNotification = make(chan T)
+	exitNotification = make(chan T)
 
 	go func() {
 		sig := <-sigchnl
 		multiSignalHandler(sig)
-		_log.Debug("Caught close...")
-		<-_exitNotification // send notification to unblock and exit
+		log.Debug("Caught close...")
+		<-exitNotification // send notification to unblock and exit
 	}()
 
-	_log = log.LoggingSetup(true, "messageManager") // start with debug enabled until overridden in config later
+	log = logging.LoggingSetup(true, "messageManager") // start with debug enabled until overridden in config later
 
-	_log.Infof("--- OCPP Message Manager - v%s ---", service.Version)
+	log.Infof("--- OCPP Message Manager - v%s ---", service.Version)
 
-	_serviceState = initialise()
-	if _serviceState.LastError != nil {
-		_log.Errorf("Error in initialisation: %s", _serviceState.LastError.Error())
+	serviceState = initialise()
+	if serviceState.LastError != nil {
+		log.Errorf("Error in initialisation: %s", serviceState.LastError.Error())
 		os.Exit(1)
 	}
-	config := _serviceState.Config
-	_log = log.LoggingSetup(config.Services.MessageManager.Debug, "messageManager")
+	config := serviceState.Config
+	log = logging.LoggingSetup(config.Services.MessageManager.Debug, "messageManager")
 	if len(config.Logging.AppInsightsInstrumentationKey) > 0 {
-		_log.AddHook(_serviceState.AppInsightsHook)
+		log.AddHook(serviceState.AppInsightsHook)
 	}
 
-	go _serviceState.MqBus.RunMqTopicReceiver(ProcessRecvMessage, mq.MqChannelName_MessagesIn, _serviceState)
+	go serviceState.MqBus.RunMqTopicReceiver(ProcessRecvMessage, mq.MqChannelName_MessagesIn, serviceState)
 
-	_log.Debug("block...")
-	_exitNotification <- struct{}{} // block until exit notification received
-	_log.Debug("Service closing...")
+	log.Debug("block...")
+	exitNotification <- struct{}{} // block until exit notification received
+	log.Debug("Service closing...")
 	dispose()
 
 	os.Exit(0)
 }
 
 func dispose() {
-	if _serviceState.Cache != nil {
-		_log.Debug("Close cache")
-		_serviceState.Cache.Close()
+	if serviceState.Cache != nil {
+		log.Debug("Close cache")
+		serviceState.Cache.Close()
 	}
 
-	if _serviceState.MqBus != nil {
-		_log.Debug("Close MqChannel")
-		_serviceState.MqBus.Close()
+	if serviceState.MqBus != nil {
+		log.Debug("Close MqChannel")
+		serviceState.MqBus.Close()
 	}
 }
 
@@ -130,14 +129,14 @@ func multiSignalHandler(signal os.Signal) {
 
 	switch signal {
 	case syscall.SIGHUP:
-		_log.Debug("Signal: ", signal.String())
+		log.Debug("Signal: ", signal.String())
 	case syscall.SIGINT:
-		_log.Debug("Signal: ", signal.String())
+		log.Debug("Signal: ", signal.String())
 	case syscall.SIGTERM:
-		_log.Debug("Signal: ", signal.String())
+		log.Debug("Signal: ", signal.String())
 	case syscall.SIGQUIT:
-		_log.Debug("Signal: ", signal.String())
+		log.Debug("Signal: ", signal.String())
 	default:
-		_log.Warnf("Unhandled/unknown signal %s", signal.String())
+		log.Warnf("Unhandled/unknown signal %s", signal.String())
 	}
 }

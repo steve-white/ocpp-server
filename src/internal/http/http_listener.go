@@ -12,7 +12,6 @@ type TcpKeepAliveListener struct {
 }
 
 func ListenAndServeWithClose(addr string, handler nethttp.Handler) (io.Closer, error) {
-
 	var (
 		listener  net.Listener
 		srvCloser io.Closer

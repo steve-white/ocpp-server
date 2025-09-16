@@ -6,6 +6,7 @@
 
 # Container
 #@API_URL = http://localhost:8080/device-manager
+@API_URL = http://157.90.173.102:30080/device-manager
 
 # device-manager auth
 @USER = admin

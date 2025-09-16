@@ -22,21 +22,6 @@ func GetHeatBeatAck(eventId string) string {
 	return json
 }
 
-/*
-TriggerMessage
-ChangeConfiguration
-ChangeAvailability
-DataTransfer
-SetChargingProfile
-GetConfiguration
-ClearChargingProfile
-GetDiagnostics
-RemoteStartTransaction
-RemoteStopTransaction
-UnlockConnector
-Reset
-*/
-
 func GenerateUniqueId() string {
 	return uuid.New().String()
 }

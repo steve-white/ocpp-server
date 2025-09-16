@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	log "sw/ocpp/csms/internal/logging"
+
 	mqmodels "sw/ocpp/csms/internal/models/mq"
 	tablemodels "sw/ocpp/csms/internal/models/table"
 	table "sw/ocpp/csms/internal/table"
@@ -24,7 +24,7 @@ func ProcessRecvMessage(messageBy []byte, state any) {
 	msgEnvelope := new(mqmodels.MqMessageEnvelope)
 	err := json.Unmarshal(messageBy, &msgEnvelope)
 	if err != nil {
-		log.Logger.Errorf("MQ Received Message, unmarshall error: %s\n", err.Error())
+		log.Errorf("MQ Received Message, unmarshall error: %s\n", err.Error())
 		return
 	}
 
@@ -33,11 +33,11 @@ func ProcessRecvMessage(messageBy []byte, state any) {
 		RowKey:       strconv.FormatInt(time.Now().UnixMilli(), 10),
 		Timestamp:    aztables.EDMDateTime(time.Now()),
 	}
-	log.Logger.Debugf("Add message partitionKey/rowKey: %s %s\n", entity.PartitionKey, entity.RowKey)
+	log.Debugf("Add message partitionKey/rowKey: %s %s\n", entity.PartitionKey, entity.RowKey)
 
 	bodyJson, err := json.Marshal(msgEnvelope.Body)
 	if err != nil {
-		log.Logger.Errorf("Error: %s", err.Error())
+		log.Errorf("Error: %s", err.Error())
 	}
 
 	ocppEnvelopeFields := msgEnvelope.Body.(map[string]interface{})
@@ -54,6 +54,6 @@ func ProcessRecvMessage(messageBy []byte, state any) {
 	// Add MQ received message to table storage
 	_, err = table.AddEntity[tablemodels.TableMessageEntity](serviceState.TableClient, tableEntity)
 	if err != nil {
-		log.Logger.Errorf("Error: %s", err.Error())
+		log.Errorf("Error: %s", err.Error())
 	}
 }

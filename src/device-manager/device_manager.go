@@ -16,7 +16,7 @@ import (
 	db "sw/ocpp/csms/internal/db"
 	helpers "sw/ocpp/csms/internal/helpers"
 	httplistener "sw/ocpp/csms/internal/http"
-	log "sw/ocpp/csms/internal/logging"
+	"sw/ocpp/csms/internal/logging"
 	svc "sw/ocpp/csms/internal/models/service"
 	mq "sw/ocpp/csms/internal/mq"
 	ocppmodels "sw/ocpp/csms/internal/ocpp"
@@ -37,10 +37,10 @@ var (
 	BuildTimestamp = "n/a"
 
 	// Globals
-	_exitNotification chan T
-	_log              = log.Logger
-	_serviceState     *ServiceState
-	ActionTimeoutSecs time.Duration = 5
+	exitNotification  chan T
+	log               = logging.Logger
+	serviceState      *ServiceState
+	actionTimeoutSecs time.Duration = 5 // TODO make this configurable - move to config
 )
 
 type T = struct{}
@@ -157,18 +157,18 @@ func setupRestApi(serviceState *ServiceState, config conf.HttpConfig) error {
 		})
 	})
 
-	_log.Info("Starting REST API Server")
+	log.Info("Starting REST API Server")
 	listenNetPort := fmt.Sprintf("%s:%d", config.ListenAddress, config.ListenPort)
-	_log.Info("REST API listening on: ", listenNetPort)
+	log.Info("REST API listening on: ", listenNetPort)
 
 	_ioCloser, err := httplistener.ListenAndServeWithClose(listenNetPort, router)
 	if err != nil {
-		_log.Error("Failed to start REST API server")
+		log.Error("Failed to start REST API server")
 		return err
 	}
-	_serviceState.IoCloser = &_ioCloser
+	serviceState.IoCloser = &_ioCloser
 
-	_log.Info("REST server started")
+	log.Info("REST server started")
 	return nil
 }
 
@@ -179,7 +179,7 @@ func StreamToByte(stream io.Reader) []byte {
 }
 
 func action_SendPayloadToCharger(w http.ResponseWriter, r *http.Request, msgType string) {
-	_log.Info("Path: " + r.URL.Path)
+	log.Info("Path: " + r.URL.Path)
 
 	device := r.Context().Value("device").(*Device)
 	var response *ocppmodels.ActionResponse
@@ -187,17 +187,17 @@ func action_SendPayloadToCharger(w http.ResponseWriter, r *http.Request, msgType
 	var buf bytes.Buffer
 	_, err := io.Copy(&buf, r.Body)
 	if err != nil {
-		_log.Errorf("Error streaming response: %s", err.Error())
+		log.Errorf("Error streaming response: %s", err.Error())
 		render.JSON(w, r, createActionResponse("Error streaming response"))
 		return
 	}
-	_log.Debugf("Read: %s", buf.String())
+	log.Debugf("Read: %s", buf.String())
 
 	msgId := ocppmodels.GenerateUniqueId()
 	profileRaw := json.RawMessage(buf.Bytes())
 	ocppMessageJson, err := CreateCsmsToDeviceRequest(msgId, device.ServerNode, device.NetworkId, msgType, profileRaw)
 	if err != nil {
-		_log.Errorf("Error in CreateCsmsToDeviceRequest: %s", err.Error())
+		log.Errorf("Error in CreateCsmsToDeviceRequest: %s", err.Error())
 		render.JSON(w, r, createActionResponse("Error in serialisation"))
 		return
 		// TODO log to appinsights
@@ -207,88 +207,88 @@ func action_SendPayloadToCharger(w http.ResponseWriter, r *http.Request, msgType
 	waitMessage.CreatedTimestamp = time.Now()
 	waitMessage.Notify = make(chan int)
 
-	_serviceState.MessagesWaiting.Store(msgId, waitMessage)
-	mqErr := _serviceState.MqBus.MqMessagePublishRetry(mq.MqChannelName_MessagesOut, ocppMessageJson)
+	serviceState.MessagesWaiting.Store(msgId, waitMessage)
+	mqErr := serviceState.MqBus.MqMessagePublishRetry(mq.MqChannelName_MessagesOut, ocppMessageJson)
 	if mqErr != nil {
-		_log.Errorf("Error sending reply to MQ, msg lost: %s", mqErr.Error())
+		log.Errorf("Error sending reply to MQ, msg lost: %s", mqErr.Error())
 		render.JSON(w, r, createActionResponse("Error sending reply to MQ, msg lost"))
 		return
 		// TODO log to appinsights
 	}
 
-	responseRaw, ok := WithTimeout(func() interface{} { return <-waitMessage.Notify }, time.Second*ActionTimeoutSecs)
+	responseRaw, ok := WithTimeout(func() interface{} { return <-waitMessage.Notify }, time.Second*actionTimeoutSecs)
 	if !ok {
-		_log.Errorf("Timed out waiting for response")
+		log.Errorf("Timed out waiting for response")
 		response = createActionResponse("Timed out waiting for response")
 	} else {
 		if responseRaw != nil {
 			responseStr := string(waitMessage.Response.MessageBody)
 			response = createActionResponse(responseStr)
 
-			_log.Info("Response: " + responseStr)
+			log.Info("Response: " + responseStr)
 			w.WriteHeader(http.StatusOK)
 		} else {
-			_log.Warn("Nil response for action")
+			log.Warn("Nil response for action")
 			response = createActionResponse("Nil response")
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}
 	render.JSON(w, r, response)
-	_serviceState.MessagesWaiting.Delete(msgId)
+	serviceState.MessagesWaiting.Delete(msgId)
 }
 
 func action_dataTransfer(w http.ResponseWriter, r *http.Request) {
 	device := r.Context().Value("device").(*Device)
-	_log.Info("DataTransfer request")
+	log.Info("DataTransfer request")
 	dataTransferMessage := &ocppmodels.OcppDataTransfer{}
 	err := json.Unmarshal(StreamToByte(r.Body), dataTransferMessage)
 	if err != nil {
-		_log.Errorf("Error unmarshalling DataTransfer: %s", err.Error())
+		log.Errorf("Error unmarshalling DataTransfer: %s", err.Error())
 		return
 	}
 
 	dataTransferBy, err := json.Marshal(&dataTransferMessage)
 	if err != nil {
-		_log.Errorf("Error marshalling response: %s", err.Error())
+		log.Errorf("Error marshalling response: %s", err.Error())
 		return
 	}
 
 	msgId := ocppmodels.GenerateUniqueId()
 	dataTransferRaw := json.RawMessage(dataTransferBy)
-	ocppMessageJson, err := CreateCsmsToDeviceRequest(msgId, device.ServerNode, device.NetworkId, ocppmodels.MsgType_DataTransfer, dataTransferRaw)
+	ocppMessageJson, _ := CreateCsmsToDeviceRequest(msgId, device.ServerNode, device.NetworkId, ocppmodels.MsgType_DataTransfer, dataTransferRaw)
 
 	waitMessage := &svc.DeviceWaitingMessage{}
 	waitMessage.CreatedTimestamp = time.Now()
 	waitMessage.Notify = make(chan int)
 
-	//err := _serviceState.MqBus.MqRegisterCallback(mq.MqChannelName_MessagesIn)
-	_serviceState.MessagesWaiting.Store(msgId, waitMessage)
-	mqErr := _serviceState.MqBus.MqMessagePublishRetry(mq.MqChannelName_MessagesOut, ocppMessageJson)
+	//err := serviceState.MqBus.MqRegisterCallback(mq.MqChannelName_MessagesIn)
+	serviceState.MessagesWaiting.Store(msgId, waitMessage)
+	mqErr := serviceState.MqBus.MqMessagePublishRetry(mq.MqChannelName_MessagesOut, ocppMessageJson)
 	if mqErr != nil {
-		_log.Errorf("Error sending reply to MQ, msg lost: %s", mqErr.Error())
+		log.Errorf("Error sending reply to MQ, msg lost: %s", mqErr.Error())
 		//return mqErr // transient MQ error unrecoverable, close connection to CP
 		// TODO log to appinsights
 	}
 
-	responseRaw, ok := WithTimeout(func() interface{} { return <-waitMessage.Notify }, time.Second*ActionTimeoutSecs)
+	responseRaw, ok := WithTimeout(func() interface{} { return <-waitMessage.Notify }, time.Second*actionTimeoutSecs)
 	var response *ocppmodels.ActionResponse
 	if !ok {
-		_log.Errorf("Timed out waiting for response")
+		log.Errorf("Timed out waiting for response")
 		response = createActionResponse("Timed out waiting for response")
 	} else {
 		if responseRaw != nil {
 			responseStr := string(waitMessage.Response.MessageBody)
 			response = createActionResponse(responseStr)
-			_log.Info("Response: " + responseStr)
+			log.Info("Response: " + responseStr)
 			w.WriteHeader(http.StatusOK)
 		} else {
-			_log.Warn("Nil response for data transfer action")
+			log.Warn("Nil response for data transfer action")
 			response = createActionResponse("Nil response")
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}
 	render.JSON(w, r, response)
-	_serviceState.MessagesWaiting.Delete(msgId)
+	serviceState.MessagesWaiting.Delete(msgId)
 }
 
 func createActionResponse(message string) *ocppmodels.ActionResponse {
@@ -399,49 +399,49 @@ func main() {
 	sigchnl := make(chan os.Signal, 1)
 	signal.Notify(sigchnl, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
 
-	_exitNotification = make(chan T)
+	exitNotification = make(chan T)
 
 	go func() {
 		sig := <-sigchnl
 		multiSignalHandler(sig)
-		_log.Debug("Caught close...")
-		<-_exitNotification // send notification to unblock and exit
+		log.Debug("Caught close...")
+		<-exitNotification // send notification to unblock and exit
 	}()
 
-	_log = log.LoggingSetup(true, "device-manager") // start with debug enabled until overridden in config later
+	log = logging.LoggingSetup(true, "device-manager") // start with debug enabled until overridden in config later
 
-	_log.Infof("--- OCPP Device Manager - v%s ---", service.Version)
+	log.Infof("--- OCPP Device Manager - v%s ---", service.Version)
 
-	_serviceState = initialise()
-	if _serviceState.LastError != nil {
-		_log.Errorf("Error in initialisation: %s", _serviceState.LastError.Error())
+	serviceState = initialise()
+	if serviceState.LastError != nil {
+		log.Errorf("Error in initialisation: %s", serviceState.LastError.Error())
 		os.Exit(1)
 	}
-	config := _serviceState.Config.Services.DeviceManager
+	config := serviceState.Config.Services.DeviceManager
 
-	_log = log.LoggingSetup(config.Debug, "device-manager")
-	if len(_serviceState.Config.Logging.AppInsightsInstrumentationKey) > 0 {
-		_log.AddHook(_serviceState.AppInsightsHook)
+	log = logging.LoggingSetup(config.Debug, "device-manager")
+	if len(serviceState.Config.Logging.AppInsightsInstrumentationKey) > 0 {
+		log.AddHook(serviceState.AppInsightsHook)
 	}
-	dbConfig := _serviceState.Config.DbConfig
+	dbConfig := serviceState.Config.DbConfig
 	err := db.ConnectDb(dbConfig.DbType, dbConfig.DbConnectionString)
 	if err != nil {
-		_log.Errorf("Error in DB connection: %s", err.Error())
+		log.Errorf("Error in DB connection: %s", err.Error())
 		os.Exit(1)
 	}
 	err = db.CreateDeviceTables()
 	if err != nil {
-		_log.Errorf("Error in DB table create: %s", err.Error())
+		log.Errorf("Error in DB table create: %s", err.Error())
 		os.Exit(1)
 	}
 
-	go _serviceState.MqBus.RunMqTopicReceiver(ProcessRecvMessage, mq.MqChannelName_MessagesIn, _serviceState)
+	go serviceState.MqBus.RunMqTopicReceiver(ProcessRecvMessage, mq.MqChannelName_MessagesIn, serviceState)
 
-	setupRestApi(_serviceState, config.HttpConfig)
+	setupRestApi(serviceState, config.HttpConfig)
 
-	_log.Debug("block...")
-	_exitNotification <- struct{}{} // block until exit notification received
-	_log.Debug("Service closing...")
+	log.Debug("block...")
+	exitNotification <- struct{}{} // block until exit notification received
+	log.Debug("Service closing...")
 
 	dispose()
 
@@ -452,22 +452,22 @@ func dispose() {
 	// TODO: move timeout to config
 	/*ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := _serviceState.HttpServer.Shutdown(ctx); err != nil {
-		_log.Error("Failed to stop REST server")
+	if err := serviceState.HttpServer.Shutdown(ctx); err != nil {
+		log.Error("Failed to stop REST server")
 	}*/
-	if _serviceState.IoCloser != nil {
-		_log.Debug("Close websocket listener")
-		(*_serviceState.IoCloser).Close()
+	if serviceState.IoCloser != nil {
+		log.Debug("Close websocket listener")
+		(*serviceState.IoCloser).Close()
 	}
 
-	if _serviceState.Cache != nil {
-		_log.Debug("Close cache")
-		_serviceState.Cache.Close()
+	if serviceState.Cache != nil {
+		log.Debug("Close cache")
+		serviceState.Cache.Close()
 	}
 
-	if _serviceState.MqBus != nil {
-		_log.Debug("Close MqChannel")
-		_serviceState.MqBus.Close()
+	if serviceState.MqBus != nil {
+		log.Debug("Close MqChannel")
+		serviceState.MqBus.Close()
 	}
 }
 
@@ -475,14 +475,14 @@ func multiSignalHandler(signal os.Signal) {
 
 	switch signal {
 	case syscall.SIGHUP:
-		_log.Debug("Signal: ", signal.String())
+		log.Debug("Signal: ", signal.String())
 	case syscall.SIGINT:
-		_log.Debug("Signal: ", signal.String())
+		log.Debug("Signal: ", signal.String())
 	case syscall.SIGTERM:
-		_log.Debug("Signal: ", signal.String())
+		log.Debug("Signal: ", signal.String())
 	case syscall.SIGQUIT:
-		_log.Debug("Signal: ", signal.String())
+		log.Debug("Signal: ", signal.String())
 	default:
-		_log.Warnf("Unhandled/unknown signal %s", signal.String())
+		log.Warnf("Unhandled/unknown signal %s", signal.String())
 	}
 }

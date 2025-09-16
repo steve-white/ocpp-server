@@ -3,8 +3,6 @@ package telemetry
 import (
 	"time"
 
-	//logrus_appinsights "github.com/jjcollinge/logrus-appinsights"
-	//"github.com/microsoft/ApplicationInsights-Go/appinsights"
 	"github.com/microsoft/ApplicationInsights-Go/appinsights"
 	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"

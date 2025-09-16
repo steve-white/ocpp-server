@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -13,13 +12,13 @@ import (
 	conf "sw/ocpp/csms/internal/config"
 	helpers "sw/ocpp/csms/internal/helpers"
 	httplistener "sw/ocpp/csms/internal/http"
-	LOG "sw/ocpp/csms/internal/logging"
+	"sw/ocpp/csms/internal/logging"
 	mqmodels "sw/ocpp/csms/internal/models/mq"
 	svc "sw/ocpp/csms/internal/models/service"
 	svcmodels "sw/ocpp/csms/internal/models/service"
 	mq "sw/ocpp/csms/internal/mq"
 	service "sw/ocpp/csms/internal/service"
-	telemetry "sw/ocpp/csms/internal/telemetry"
+	"sw/ocpp/csms/internal/telemetry"
 
 	"github.com/go-redis/redis"
 	"github.com/gorilla/websocket"
@@ -28,9 +27,9 @@ import (
 
 var (
 	// Globals
-	_exitNotification chan T
-	_log              = LOG.Logger
-	_serviceState     *ServiceState
+	exitNotification chan T
+	log              = logging.Logger
+	serviceState     *ServiceState
 )
 
 type T = struct{}
@@ -53,7 +52,7 @@ func initialise() *ServiceState {
 			return &ServiceState{LastError: err}
 		}
 	} else {
-		_log.Warn("Not connecting to redis auth cache")
+		log.Warn("Not connecting to redis auth cache")
 	}
 
 	mqConnection := mq.SetupMqConnection(config.Mq, config.Mq.MangosMq.CsmsListenUrl, "", config.Mq.MangosMq.CsmsListenRequestUrl, "")
@@ -90,56 +89,57 @@ func main() {
 	sigchnl := make(chan os.Signal, 1)
 	signal.Notify(sigchnl, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
 
-	_exitNotification = make(chan T)
+	exitNotification = make(chan T)
 
 	go func() {
 		sig := <-sigchnl
 		multiSignalHandler(sig)
-		_log.Debug("Caught close...")
-		<-_exitNotification // send notification to unblock and exit
+		log.Debug("Caught close...")
+		<-exitNotification // send notification to unblock and exit
 	}()
 
-	_log = LOG.LoggingSetup(true, "csms-server") // start with debug enabled until overridden in config later
+	log = logging.LoggingSetup(true, "csms-server") // start with debug enabled until overridden in config later
 
-	_log.Infof("--- CSMS OCPP Server - v%s ---", service.Version)
+	log.Infof("--- CSMS OCPP Server - v%s ---", service.Version)
 
-	_serviceState = initialise()
-	if _serviceState.LastError != nil {
-		_log.Errorf("Error in initialisation: %s", _serviceState.LastError.Error())
+	serviceState = initialise()
+	if serviceState.LastError != nil {
+		log.Errorf("Error in initialisation: %s", serviceState.LastError.Error())
 		os.Exit(1)
 	}
-	config := _serviceState.Config.Services.CsmsServer
+	config := serviceState.Config.Services.CsmsServer
 
-	_log = LOG.LoggingSetup(config.Debug, "csms-server")
-	if len(_serviceState.Config.Logging.AppInsightsInstrumentationKey) > 0 {
-		_log.AddHook(_serviceState.AppInsightsHook)
+	log = logging.LoggingSetup(config.Debug, "csms-server")
+	if len(serviceState.Config.Logging.AppInsightsInstrumentationKey) > 0 {
+		log.AddHook(serviceState.AppInsightsHook)
 	}
 
-	_log.Debugf("standalone_mode: %t", _serviceState.Config.Services.CsmsServer.StandaloneMode)
-	_log.Debugf("enable_auth: %t", _serviceState.Config.Services.CsmsServer.EnableAuth)
+	log.Debugf("standalone_mode: %t", serviceState.Config.Services.CsmsServer.StandaloneMode)
+	log.Debugf("enable_auth: %t", serviceState.Config.Services.CsmsServer.EnableAuth)
 
-	//go expungeOldWaitingMessages(_serviceState.MessagesWaiting, 1*time.Minute) // Expunge every 1 minute
+	// TODO
+	//go expungeOldWaitingMessages(serviceState.MessagesWaiting, 1*time.Minute) // Expunge every 1 minute
 
-	go _serviceState.MqBus.RunMqTopicReceiver(ProcessRecvMqMessage, mq.MqChannelName_MessagesOut, _serviceState)
+	go serviceState.MqBus.RunMqTopicReceiver(ProcessRecvMqMessage, mq.MqChannelName_MessagesOut, serviceState)
 
 	var err error
 	listenNetPort := fmt.Sprintf("%s:%d", config.ListenAddress, config.ListenPort)
-	_log.Info("OCPP listening on: ", listenNetPort)
+	log.Info("OCPP listening on: ", listenNetPort)
 
-	hostName := _serviceState.Context.HostName
-	mq.MqNotifyNodeConnected(_serviceState.MqBus, hostName)
+	hostName := serviceState.Context.HostName
+	mq.MqNotifyNodeConnected(serviceState.MqBus, hostName)
 
-	_ioCloser, err := httplistener.ListenAndServeWithClose(listenNetPort, HttpHandler(_serviceState))
-	_serviceState.IoCloser = &_ioCloser
+	ioCloser, err := httplistener.ListenAndServeWithClose(listenNetPort, HttpHandler(serviceState))
+	serviceState.IoCloser = &ioCloser
 
 	if err != nil {
 		log.Fatalln(err)
 		os.Exit(1)
 	}
-	_log.Debug("block...")
-	_exitNotification <- struct{}{} // block until exit notification received
-	_log.Debug("Service closing...")
-	mq.MqNotifyNodeDisconnected(_serviceState.MqBus, hostName)
+	log.Debug("block...")
+	exitNotification <- struct{}{} // block until exit notification received
+	log.Debug("Service closing...")
+	mq.MqNotifyNodeDisconnected(serviceState.MqBus, hostName)
 
 	dispose()
 
@@ -160,7 +160,7 @@ func expungeOldWaitingMessages(m *xsync.Map, ageLimit time.Duration) {
 			// Check if the entry is older than the specified age limit
 			if now.Sub(val.CreatedTimestamp) > ageLimit {
 				m.Delete(key)
-				_log.Infof("Deleted key: %s\n", key)
+				log.Infof("Deleted key: %s\n", key)
 			}
 			return true // Continue iteration
 		})
@@ -168,17 +168,17 @@ func expungeOldWaitingMessages(m *xsync.Map, ageLimit time.Duration) {
 }
 
 func dispose() {
-	if _serviceState.IoCloser != nil {
-		_log.Debug("Close websocket listener")
-		(*_serviceState.IoCloser).Close()
+	if serviceState.IoCloser != nil {
+		log.Debug("Close websocket listener")
+		(*serviceState.IoCloser).Close()
 	}
-	if _serviceState.MqBus != nil {
-		_log.Debug("Close MQ")
-		_serviceState.MqBus.Close()
+	if serviceState.MqBus != nil {
+		log.Debug("Close MQ")
+		serviceState.MqBus.Close()
 	}
-	if _serviceState.Cache != nil {
-		_log.Debug("Close cache")
-		_serviceState.Cache.Close()
+	if serviceState.Cache != nil {
+		log.Debug("Close cache")
+		serviceState.Cache.Close()
 	}
 }
 
@@ -186,15 +186,15 @@ func multiSignalHandler(signal os.Signal) {
 
 	switch signal {
 	case syscall.SIGHUP:
-		_log.Debug("Signal: ", signal.String())
+		log.Debug("Signal: ", signal.String())
 	case syscall.SIGINT:
-		_log.Debug("Signal: ", signal.String())
+		log.Debug("Signal: ", signal.String())
 	case syscall.SIGTERM:
-		_log.Debug("Signal: ", signal.String())
+		log.Debug("Signal: ", signal.String())
 	case syscall.SIGQUIT:
-		_log.Debug("Signal: ", signal.String())
+		log.Debug("Signal: ", signal.String())
 	default:
-		_log.Warnf("Unhandled/unknown signal %s", signal.String())
+		log.Warnf("Unhandled/unknown signal %s", signal.String())
 	}
 }
 
@@ -202,7 +202,7 @@ func ProcessRecvMqMessage(messageBy []byte, state any) { //message amqp.Delivery
 	msgEnvelope := new(mqmodels.MqMessageEnvelope)
 	err := json.Unmarshal(messageBy, &msgEnvelope)
 	if err != nil {
-		_log.Errorf("MQ Received Message, unmarshall error: %s\n", err.Error())
+		log.Errorf("MQ Received Message, unmarshall error: %s\n", err.Error())
 		// TODO reply with OCPP error?
 		return
 	}
@@ -217,14 +217,14 @@ func ProcessRecvMqMessage(messageBy []byte, state any) { //message amqp.Delivery
 		ocppEnvelopeFields := msgEnvelope.Body.(map[string]interface{})
 		/*err := json.Unmarshal(msgEnvelope.Body, &ocppEnvelopeFields)
 		if err != nil {
-			_log.Errorf("[ %s ] Unable to unmarshall message envelope: %s - %s", msgEnvelope.Client, string(messageBy), err.Error())
+			log.Errorf("[ %s ] Unable to unmarshall message envelope: %s - %s", msgEnvelope.Client, string(messageBy), err.Error())
 			// TODO reply with OCPP error ?
 			return
 		}*/
 
 		body, err := json.Marshal(ocppEnvelopeFields["messageBody"])
 		if err != nil {
-			_log.Errorf("[ %s ] Unable to marshall messageBody for envelope: %s - %s", msgEnvelope.Client, string(messageBy), err.Error())
+			log.Errorf("[ %s ] Unable to marshall messageBody for envelope: %s - %s", msgEnvelope.Client, string(messageBy), err.Error())
 			// TODO reply with OCPP error ?
 			return
 		}
@@ -251,14 +251,14 @@ func ProcessRecvMqMessage(messageBy []byte, state any) { //message amqp.Delivery
 				body)
 		}
 
-		_log.Debugf("[ %s ] Reply: %s", msgEnvelope.Client, msgReply)
+		log.Debugf("[ %s ] Reply: %s", msgEnvelope.Client, msgReply)
 		connection.WebSocketMutex.Lock()
 		err = connection.WebSocket.WriteMessage(websocket.TextMessage, []byte(msgReply))
 		connection.WebSocketMutex.Unlock()
 		if err != nil {
-			_log.Errorf("[ %s ] Error writing msg to client, msg: %s - %s", msgEnvelope.Client, string(msgReply), err.Error())
+			log.Errorf("[ %s ] Error writing msg to client, msg: %s - %s", msgEnvelope.Client, string(msgReply), err.Error())
 		}
 	} else {
-		_log.Warnf("[ %s ] Client no longer exists, message lost: %s", msgEnvelope.Client, string(messageBy))
+		log.Warnf("[ %s ] Client no longer exists, message lost: %s", msgEnvelope.Client, string(messageBy))
 	}
 }
